@@ -1,0 +1,1132 @@
+================================================================================
+  MOTION ENGINE — DEEP KNOWLEDGE BRAINSTORM
+  Comprehensive Understanding of Web Motion for motion-engine-mcp
+  Created: 2026-06-02
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: THE PROBLEM — WHY AI-GENERATED ANIMATION IS BAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When an LLM is asked to animate a UI component, it produces code like this:
+
+    transition: all 0.3s ease;
+
+This single line contains FOUR distinct anti-patterns:
+
+  1. "all" — Instructs the browser to monitor and animate EVERY animatable CSS
+     property on the element. If color, font-size, width, or height change
+     alongside transform, the browser wastes resources animating unintended
+     properties. It also causes unexpected "flashing" on page load.
+
+  2. "0.3s" — A fixed, arbitrary duration that has no relationship to the
+     physical mass or spatial distance of the element being animated. A tiny
+     icon and a full-screen modal both move in exactly 0.3 seconds, which
+     feels wrong to the human eye.
+
+  3. "ease" — A generic cubic-bezier(0.25, 0.1, 0.25, 1.0) curve that
+     approximates deceleration but has no physical basis. It cannot bounce,
+     it cannot overshoot, and if interrupted mid-animation, it snaps jarringly
+     to the new target.
+
+  4. No GPU awareness — "transition: all" includes properties like width,
+     height, top, left, margin, padding — ALL of which trigger the Layout
+     stage of the rendering pipeline. This causes full-page reflows on every
+     single frame (16.67ms at 60fps), creating visible "jank."
+
+THE ROOT CAUSE:
+LLMs generate animation from token probability, not from physics. They have no
+concept of mass, velocity, stiffness, damping, spatial perspective, or the
+browser's rendering pipeline. The motion-engine-mcp project exists to inject
+that missing physical and computational awareness.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: THE PHYSICS OF MOTION — SPRING DYNAMICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1 — HOOKE'S LAW (THE FOUNDATION)
+───────────────────────────────────
+
+All organic UI motion derives from the damped harmonic oscillator:
+
+    F = -kx - cv
+
+Where:
+    F = Net restoring force (Newtons)
+    k = Stiffness coefficient (Spring tension)
+    x = Displacement from equilibrium (how far from target)
+    c = Damping coefficient (friction/resistance)
+    v = Velocity (current speed of the element)
+
+The equation of motion for mass m:
+
+    m * a = -kx - cv
+    m * (d²x/dt²) + c * (dx/dt) + k * x = 0
+
+This is a second-order linear ODE. Its solutions determine three possible
+motion behaviors:
+
+
+2.2 — THE THREE DAMPING STATES
+──────────────────────────────
+
+The damping ratio (zeta) determines the character of motion:
+
+    zeta = c / (2 * sqrt(k * m))
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ UNDERDAMPED (zeta < 1.0)                                               │
+  │ ─────────────────────────                                              │
+  │ The element OVERSHOOTS the target and oscillates back and forth        │
+  │ before settling. Creates a "bouncy" feel.                              │
+  │                                                                        │
+  │ USE FOR: Playful UI, notification badges, toggle switches, tooltips    │
+  │ FEEL:    Energetic, alive, springy                                     │
+  │ TYPICAL: zeta = 0.5 to 0.85                                           │
+  │                                                                        │
+  │ Example spring config:                                                 │
+  │   stiffness: 300, damping: 15, mass: 1  →  zeta ≈ 0.43 (very bouncy) │
+  │   stiffness: 300, damping: 25, mass: 1  →  zeta ≈ 0.72 (subtle)      │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │ CRITICALLY DAMPED (zeta = 1.0)                                         │
+  │ ───────────────────────────────                                        │
+  │ The element reaches target as FAST AS POSSIBLE with ZERO overshoot.   │
+  │ The most efficient settling behavior.                                  │
+  │                                                                        │
+  │ USE FOR: Functional transitions, modal open/close, page navigation    │
+  │ FEEL:    Precise, professional, controlled                             │
+  │ TYPICAL: zeta = 1.0                                                    │
+  │                                                                        │
+  │ Critical damping condition:                                            │
+  │   c_critical = 2 * sqrt(k * m)                                        │
+  │ Example:                                                               │
+  │   stiffness: 300, mass: 1  →  c_crit = 2 * sqrt(300) ≈ 34.64         │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │ OVERDAMPED (zeta > 1.0)                                                │
+  │ ─────────────────────────                                              │
+  │ The element approaches target SLOWLY without any oscillation.          │
+  │ Movement feels sluggish and "heavy."                                   │
+  │                                                                        │
+  │ USE FOR: Background layer motion, parallax depth, cinematic reveals   │
+  │ FEEL:    Weighty, dramatic, luxurious                                  │
+  │ TYPICAL: zeta = 1.2 to 2.0                                            │
+  │                                                                        │
+  │ Example:                                                               │
+  │   stiffness: 100, damping: 40, mass: 1  →  zeta ≈ 2.0 (very heavy)   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+
+2.3 — THE THREE PHYSICAL PARAMETERS (DEEP DIVE)
+────────────────────────────────────────────────
+
+STIFFNESS (k):
+  - Controls HOW HARD the spring pulls toward the target.
+  - Higher stiffness = faster, more aggressive snap.
+  - Lower stiffness = gentle, lazy drift.
+  - Practical range: 100–800
+  - CRITICAL INSIGHT: Stiffness should correlate with element importance.
+    A primary CTA button should have higher stiffness (snappier response)
+    than a decorative background element.
+
+    Mapping table:
+      k = 100-150  →  Background parallax, ambient motion
+      k = 200-300  →  Cards, panels, standard UI containers
+      k = 300-500  →  Buttons, interactive controls, nav items
+      k = 500-800  →  Micro-interactions, toggle switches, urgent feedback
+
+DAMPING (c):
+  - Controls HOW QUICKLY oscillations die out.
+  - Higher damping = less bounce, faster settle.
+  - Lower damping = more oscillation, more "spring."
+  - Practical range: 5–40
+  - CRITICAL INSIGHT: Damping should correlate with brand personality.
+
+    Mapping table:
+      c = 5-10   →  Playful brands, games, entertainment
+      c = 10-20  →  Consumer apps, e-commerce, social media
+      c = 20-30  →  SaaS dashboards, productivity tools
+      c = 30-40  →  Finance, legal, enterprise, luxury editorial
+
+MASS (m):
+  - Controls the INERTIA of the element.
+  - Higher mass = slower to start, slower to stop ("lumbering").
+  - Lower mass = responsive, quick to change direction.
+  - Practical range: 0.5–3.0
+  - CRITICAL INSIGHT: Mass should correlate with visual weight.
+
+    Mapping table:
+      m = 0.3-0.5  →  Icons, badges, small indicators
+      m = 0.8-1.2  →  Buttons, cards, standard components
+      m = 1.5-2.0  →  Modals, full-width panels, hero sections
+      m = 2.0-3.0  →  Full-page transitions, immersive 3D elements
+
+
+2.4 — SPRING vs. CUBIC-BEZIER: THE FUNDAMENTAL DIFFERENCE
+──────────────────────────────────────────────────────────
+
+  ┌──────────────────────┬─────────────────────────┬───────────────────────┐
+  │ Dimension            │ Cubic-Bézier            │ Spring Physics        │
+  ├──────────────────────┼─────────────────────────┼───────────────────────┤
+  │ Driver               │ TIME (fixed duration)   │ PHYSICS (velocity)    │
+  │ Interruption         │ Snaps/restarts jarringly│ Fluid, preserves      │
+  │                      │                         │ momentum seamlessly   │
+  │ Overshoot/Bounce     │ Cannot reverse direction│ Natural oscillation   │
+  │                      │ within a single curve   │ around target         │
+  │ Gesture response     │ Must restart from 0     │ Inherits current      │
+  │                      │                         │ velocity as input     │
+  │ Determinism          │ Always same path        │ Path depends on       │
+  │                      │                         │ initial conditions    │
+  │ Complexity           │ 4 control points        │ 3 parameters + ODE    │
+  │ Use case             │ Simple hover effects    │ Interactive, gestural │
+  │                      │                         │ motion                │
+  └──────────────────────┴─────────────────────────┴───────────────────────┘
+
+WHY SPRINGS WIN FOR INTERACTIVE UI:
+When a user interrupts an animation (e.g., clicking a button that's still
+animating from a previous hover), a bezier-based system must either:
+  a) Snap to the end and restart (jarring)
+  b) Cancel and begin fresh (discontinuous velocity)
+
+A spring system simply uses the element's CURRENT position and CURRENT velocity
+as the new initial conditions and calculates a new trajectory. The result is
+smooth, continuous, organic motion that never feels "broken."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: THE BROWSER RENDERING PIPELINE — HOW ANIMATION ACTUALLY WORKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1 — THE FIVE-STAGE PIPELINE
+─────────────────────────────
+
+Every frame (ideally every 16.67ms at 60fps), the browser runs:
+
+  JavaScript → Style → Layout → Paint → Composite
+       │          │        │        │         │
+       │          │        │        │         └─ GPU draws layers on screen
+       │          │        │        └─ Fills pixels (colors, shadows, borders)
+       │          │        └─ Calculates geometry (position, size) — EXPENSIVE
+       │          └─ Determines which CSS rules apply
+       └─ Runs user logic, event handlers, rAF callbacks
+
+CRITICAL RULE:
+  Smooth 60fps animation = keep work in the COMPOSITE stage only.
+  If you touch Layout or Paint, the browser does vastly more work per frame.
+
+
+3.2 — PROPERTY COST CLASSIFICATION
+───────────────────────────────────
+
+  ┌────────────────────┬─────────────────────────────┬──────────────────────┐
+  │ Cost Tier          │ Properties                  │ Pipeline Stages      │
+  ├────────────────────┼─────────────────────────────┼──────────────────────┤
+  │ ★ COMPOSITE ONLY   │ transform, opacity          │ Composite            │
+  │   (BEST)           │                             │ GPU-accelerated      │
+  │                    │                             │ Main thread free     │
+  ├────────────────────┼─────────────────────────────┼──────────────────────┤
+  │ ★★ PAINT           │ background-color, color,    │ Paint + Composite    │
+  │   (MODERATE)       │ box-shadow, border-radius,  │ CPU-bound per frame  │
+  │                    │ text-shadow, outline         │                      │
+  ├────────────────────┼─────────────────────────────┼──────────────────────┤
+  │ ★★★ LAYOUT         │ width, height, top, left,   │ Layout + Paint +     │
+  │   (WORST)          │ margin, padding, font-size, │ Composite            │
+  │                    │ border-width, display        │ Full reflow cascade  │
+  └────────────────────┴─────────────────────────────┴──────────────────────┘
+
+THE GOLDEN RULE: Only ever animate "transform" and "opacity."
+Transform subsumes: translate(), scale(), rotate(), skew(), matrix3d()
+Everything else should be static or achieved through compositor tricks.
+
+
+3.3 — THE will-change PROPERTY
+──────────────────────────────
+
+Purpose: Hints to the browser that an element is about to animate a specific
+         property, allowing it to pre-promote the element to its own
+         compositor layer (GPU texture).
+
+  will-change: transform;
+  will-change: opacity;
+  will-change: transform, opacity;
+
+RULES:
+  1. Apply BEFORE the animation starts (e.g., on hover intent, not on hover).
+  2. REMOVE after the animation completes (prevents GPU memory leaks).
+  3. Do NOT blanket-apply to many elements (each promoted layer consumes VRAM).
+  4. If you are not experiencing jank, you do NOT need will-change.
+  5. NEVER use: will-change: all; — it defeats the purpose.
+
+MOTION-ENGINE GUARDRAIL:
+  The motion.md output must always include:
+    will-change: transform;
+  on any element receiving spring-based motion, and the LLM must be
+  instructed to remove it after animation completion via JS event handlers.
+
+
+3.4 — THE box-shadow PERFORMANCE TRICK
+───────────────────────────────────────
+
+Animating box-shadow directly is EXPENSIVE (triggers Paint on every frame).
+
+THE PSEUDO-ELEMENT TRICK:
+  Instead of animating the shadow itself, pre-render the target shadow on a
+  ::after pseudo-element with opacity: 0, then animate only the opacity.
+
+  .card {
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);  /* base state */
+  }
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);  /* target state */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .card:hover::after {
+    opacity: 1;  /* only opacity animates — compositor only! */
+  }
+
+MOTION-ENGINE GUARDRAIL:
+  When the telemetry engine detects box-shadow transitions on a reference
+  site, the motion.md output must convert them to the pseudo-element pattern.
+
+
+3.5 — CSS TRANSFORM MATRIX INTERNALS
+─────────────────────────────────────
+
+The browser reduces ALL transform functions to a single 4×4 matrix:
+
+  matrix3d(a1, b1, c1, d1, a2, b2, c2, d2, a3, b3, c3, d3, a4, b4, c4, d4)
+
+These 16 values are in COLUMN-MAJOR order:
+
+  ┌                        ┐
+  │  a1   a2   a3   a4     │     Columns 1-3: rotation, scale, skew
+  │  b1   b2   b3   b4     │     Column 4 (a4, b4, c4): translation (x, y, z)
+  │  c1   c2   c3   c4     │     Row 4 (d1, d2, d3): perspective
+  │  d1   d2   d3   d4     │     d4: homogeneous coordinate (always 1)
+  └                        ┘
+
+DECOMPOSITION (the "Unmatrix" algorithm from Graphics Gems II):
+  When the browser interpolates between two transforms, it:
+  1. Decomposes each matrix into: translate, rotate, scale, skew, perspective
+  2. Interpolates each component individually
+  3. Recomposes into a new matrix
+
+  This is why animating from "rotate(0deg)" to "matrix3d(...)" works smoothly.
+
+MOTION-ENGINE RELEVANCE:
+  When the telemetry engine scrapes getComputedStyle().transform, it receives
+  the raw matrix3d string. The server must decompose this to extract:
+  - Translation vector (x, y, z movement)
+  - Rotation angles (via quaternion extraction)
+  - Scale factors
+  - Skew angles
+  This decomposition allows the MCP to output human-readable spring targets
+  rather than opaque matrix arrays.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: HUMAN PERCEPTION OF MOTION — WHAT FEELS "RIGHT"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 — TEMPORAL THRESHOLDS OF PERCEPTION
+───────────────────────────────────────
+
+  < 100ms     →  Perceived as INSTANTANEOUS. The eye cannot track what moved.
+                 Too fast for functional animation. OK for micro-feedback only
+                 (e.g., button press state).
+
+  100–200ms   →  Perceived as QUICK. Suitable for small, local interactions
+                 (hover effects, toggle switches, tooltip reveals).
+
+  200–500ms   →  The OPTIMAL WINDOW. Slow enough for the eye to follow the
+                 motion and understand spatial relationships, but fast enough
+                 to avoid feeling "slow." This is where 90% of functional UI
+                 animation should live.
+
+  500ms–1s    →  Perceived as DELIBERATE. Use for dramatic reveals, hero
+                 transitions, full-page layouts. Any longer and the user
+                 feels like they're waiting.
+
+  > 1 second  →  Perceived as DELAY. Causes frustration. Only acceptable
+                 for cinematic, scroll-driven narratives where the user
+                 controls playback via scroll position.
+
+MOTION-ENGINE RULE:
+  The spring solver must ensure that the "perceptual duration" (time from
+  animation start to when displacement is < 5% of initial) falls within
+  the 150ms–800ms range for interactive elements.
+
+
+4.2 — SPATIAL CONTEXT AND DISTANCE
+──────────────────────────────────
+
+Material Design principle: Duration scales with DISTANCE and COMPLEXITY.
+
+  - Small movements (< 50px):  150–250ms
+  - Medium movements (50–200px): 200–400ms
+  - Large movements (200px+):  300–600ms
+  - Full-screen transitions:   400–700ms
+
+  - Simple (single element):   Base duration
+  - Complex (staggered group): Base + (N * stagger_delay)
+
+  Entering elements: Use DECELERATION (ease-out). They arrive from
+    off-screen with momentum and "land" gently.
+  Exiting elements: Use ACCELERATION (ease-in). They accelerate away,
+    leaving the viewport with increasing speed.
+  On-screen transitions: Use STANDARD easing (ease-in-out). They begin
+    and end at rest.
+
+
+4.3 — STAGGERED ANIMATION: THE CHOREOGRAPHY PRINCIPLE
+──────────────────────────────────────────────────────
+
+When multiple elements animate simultaneously (e.g., a list of cards loading
+in), they must be staggered — each starting slightly after the previous one.
+
+  Optimal stagger delay: 30ms–80ms per element.
+
+  Too short (< 20ms): Elements appear to move simultaneously (no benefit).
+  Too long (> 120ms): The sequence feels sluggish and drawn-out.
+
+  PATTERN: "Cascade" — Each element starts its animation stagger_delay ms
+  after the previous one:
+    Element 0: start at t = 0ms
+    Element 1: start at t = 50ms
+    Element 2: start at t = 100ms
+    Element N: start at t = N * 50ms
+
+  ADVANCED PATTERN: "Radial cascade" — Elements closest to the trigger
+  point animate first, and the delay increases with distance from the
+  epicenter. Used in grid layouts where a click "ripples" outward.
+
+
+4.4 — TYPOGRAPHY AND KINETIC WEIGHT
+───────────────────────────────────
+
+The typeface of the text inside an animated element changes how the motion
+is perceived:
+
+  SERIF FONTS (Times, Georgia, Playfair Display):
+    - Serif details create higher visual density.
+    - Fast motion causes serifs to "blur" into illegibility.
+    - Recommendation: SLOWER motion, HIGHER damping, HIGHER mass.
+    - Ban fast rotations (> 15deg) on serif text.
+    - Ideal spring config: k=150, c=30, m=1.5
+
+  SANS-SERIF FONTS (Inter, Roboto, Helvetica):
+    - Clean geometric forms maintain legibility during motion.
+    - Can tolerate faster movement and rotation.
+    - Recommendation: Can use full range of spring parameters.
+    - Ideal spring config: k=300, c=20, m=1.0
+
+  DISPLAY/DECORATIVE FONTS:
+    - Vary wildly. Generally treat like serif (slower, heavier).
+    - Kinetic typography (animated text) requires 40–60ms per character
+      of dwell time to maintain readability.
+
+  FONT WEIGHT AS MASS MULTIPLIER:
+    - Light (100-300): mass_multiplier = 0.7
+    - Regular (400):   mass_multiplier = 1.0
+    - Bold (700):      mass_multiplier = 1.3
+    - Black (900):     mass_multiplier = 1.6
+
+MOTION-ENGINE IMPLEMENTATION:
+  The ContextScanner (Phase 2) must parse CSS font-family declarations and
+  classify them as serif/sans-serif/display, then feed this classification
+  into the spring solver as a constraint on maximum stiffness and minimum
+  damping.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: ANIMATION TRIGGER SYSTEMS — SCROLL, HOVER, TIME
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1 — SCROLL-TRIGGERED ANIMATION
+─────────────────────────────────
+
+Two fundamentally different paradigms:
+
+  A) THRESHOLD-BASED (IntersectionObserver):
+     Animation PLAYS when an element enters the viewport.
+     The scroll position determines WHEN, not HOW the animation runs.
+
+     Best practices:
+       - threshold: 0.1 (trigger when 10% visible)
+       - rootMargin: "0px 0px -50px 0px" (trigger 50px before element
+         reaches bottom edge — feels more responsive)
+       - Unobserve after triggering (one-shot) for performance
+       - Use CSS class toggle, not JS animation API
+
+  B) SCROLL-SCRUBBED (CSS Scroll-Driven Animations / GSAP ScrollTrigger):
+     The scroll position IS the animation timeline.
+     The user directly controls playback by scrolling.
+
+     The CSS Scroll-Driven Animations API (animation-timeline: scroll())
+     is now fully supported in Chrome, Safari, Firefox, and Edge as of 2026.
+     It runs on the compositor thread (GPU), making it significantly more
+     performant than JavaScript scroll listeners.
+
+     GSAP ScrollTrigger remains the industry standard for complex
+     orchestrations that require pinning, scrubbing, and callbacks.
+
+MOTION-ENGINE TELEMETRY:
+  When scraping a reference URL, the telemetry engine must:
+  1. Detect which trigger system is in use (IO vs scroll-timeline vs GSAP)
+  2. If scroll-scrubbed: record transform values at scroll percentages
+     (e.g., at 0% scroll = matrix3d(...), at 50% scroll = matrix3d(...))
+  3. If threshold-based: record the full animation timeline after trigger
+     (frame-by-frame capture via requestAnimationFrame)
+
+
+5.2 — HOVER-TRIGGERED ANIMATION
+────────────────────────────────
+
+  mouseenter/mouseleave are the correct events (not mouseover/mouseout,
+  which bubble and cause flickering on child elements).
+
+  CRITICAL PATTERN — Bidirectional transitions:
+    Enter and exit should use DIFFERENT timing:
+    - Enter: Faster (150–250ms) — immediate response to user intent
+    - Exit:  Slower (300–500ms) — graceful, deliberate withdrawal
+
+    .button {
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      /* Exit is 0.3s with standard easing */
+    }
+    .button:hover {
+      transform: scale(1.05);
+      transition-duration: 0.15s;
+      /* Enter is 0.15s — snappy response */
+    }
+
+  With spring physics, this asymmetry is AUTOMATIC:
+    Spring-in with low damping (bouncy arrival) naturally takes longer to
+    settle than spring-out with higher damping (smooth departure).
+
+
+5.3 — TIME-TRIGGERED ANIMATION (Autonomous)
+────────────────────────────────────────────
+
+  Animations that run without user interaction:
+  - Loading skeletons, breathing effects, ambient gradients
+  - Auto-rotating carousels, typing indicators
+  - Background particle systems
+
+  RULES:
+  1. Must respect prefers-reduced-motion (see Part 8)
+  2. Should use CSS @keyframes, not JS intervals
+  3. Must loop with animation-iteration-count: infinite
+  4. Should use animation-play-state: paused when element is not visible
+     (IntersectionObserver can toggle this for performance)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: CSS 3D SPACE — PERSPECTIVE AND DEPTH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6.1 — PERSPECTIVE
+─────────────────
+
+  perspective: Xpx;  (applied to the PARENT container)
+
+  Defines the distance between the viewer and the z=0 plane.
+  Lower values = more dramatic foreshortening (things close feel HUGE).
+  Higher values = flatter, more subtle depth.
+
+  ┌────────────────────┬───────────────────────────────────────────────────┐
+  │ Value Range        │ Effect                                          │
+  ├────────────────────┼───────────────────────────────────────────────────┤
+  │ 200–400px          │ Extreme, fisheye-like distortion. Dramatic.     │
+  │ 500–800px          │ Strong depth. Good for card flips, 3D carousels.│
+  │ 800–1200px         │ Moderate depth. Standard for 2.5D layouts.      │
+  │ 1200–2000px        │ Subtle depth. Used for parallax layers.         │
+  │ > 2000px           │ Nearly flat. Minimal visual depth effect.       │
+  └────────────────────┴───────────────────────────────────────────────────┘
+
+  perspective-origin: Sets the vanishing point (default: center center).
+    - Moving it off-center creates asymmetric depth, like looking at a
+      stage from the side rather than head-on.
+
+
+6.2 — 3D STACKING CONTEXT
+──────────────────────────
+
+  transform-style: preserve-3d;  (applied to the element being rotated)
+    Without this, child elements are flattened into the parent's 2D plane.
+    The 3D rotation will look flat and incorrect.
+
+  backface-visibility: hidden;  (applied to front and back faces)
+    Hides the "back side" of a rotated element. Essential for card flips.
+
+  overflow: hidden + preserve-3d CONFLICT:
+    Setting overflow: hidden on a parent will DESTROY preserve-3d in all
+    children. This is a common, devastating bug.
+
+MOTION-ENGINE GUARDRAIL:
+  The motion.md spatial environment section must include:
+  - Strict perspective value based on spatial plane (2D vs 2.5D)
+  - overflow: visible requirement on 3D parent containers
+  - Explicit transform-style: preserve-3d on rotating elements
+  - backface-visibility rules for dual-face components
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: THE ANIMATION LIBRARY LANDSCAPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1 — GSAP (GreenSock Animation Platform)
+──────────────────────────────────────────
+
+  Architecture: Imperative, timeline-based sequencing engine.
+  Philosophy:   YOU define what, when, and how. Frame-perfect control.
+
+  Key Features:
+  - gsap.to() / gsap.from() / gsap.fromTo(): Core tweening
+  - gsap.timeline(): Nested, sequenced animation orchestration
+  - ScrollTrigger: Links timeline progress to scroll position
+  - Physics2DPlugin: Velocity, gravity, friction (NOT spring-based)
+  - CustomEase: Author arbitrary easing curves
+  - SplitText: Character/word/line-level text animation
+
+  Spring Animation in GSAP:
+    GSAP does NOT have a native spring solver like Framer Motion.
+    Instead, it offers:
+    - CustomEase with elastic/bounce patterns
+    - InertiaPlugin for drag-release deceleration
+    - Custom spring easing via gsap.registerEase()
+
+  Output Format for motion.md (GSAP):
+    gsap.to(".element", {
+      x: 200,
+      rotation: 15,
+      duration: 0.6,
+      ease: CustomEase.create("custom", "M0,0 C0.25,0.1 0.25,1 1,1")
+    });
+
+  Best for: Complex timelines, marketing pages, scroll-driven narratives,
+            framework-agnostic projects.
+
+
+7.2 — FRAMER MOTION (motion.dev)
+────────────────────────────────
+
+  Architecture: Declarative, state-driven, React-integrated.
+  Philosophy:   Describe the END STATE. Physics handles the path.
+
+  Key Features:
+  - <motion.div> components with animate/initial/exit props
+  - type: "spring" with stiffness, damping, mass parameters
+  - AnimatePresence: Animate components on mount/unmount
+  - useScroll(): Scroll-linked motion values
+  - LayoutGroup: Animate layout changes (FLIP technique)
+  - Gesture handlers: whileHover, whileTap, whileDrag
+
+  Spring Animation in Framer Motion:
+    transition={{
+      type: "spring",
+      stiffness: 300,    // range: 100-800
+      damping: 20,       // range: 5-40
+      mass: 1            // range: 0.5-3
+    }}
+
+    OR the simpler two-parameter model:
+    transition={{
+      type: "spring",
+      duration: 0.5,     // perceptual duration
+      bounce: 0.3        // 0 = no bounce, 1 = max bounce
+    }}
+
+  Best for: React applications, interactive UI components, gesture-driven
+            motion, layout animations.
+
+
+7.3 — CSS NATIVE (Keyframes + Scroll-Driven Animations)
+────────────────────────────────────────────────────────
+
+  CSS @keyframes + animation-timeline: scroll() is now fully supported
+  across all major browsers (Chrome, Firefox, Safari, Edge) as of 2026.
+
+  Runs entirely on the compositor thread (zero JavaScript, zero main thread).
+  The most performant option for scroll-linked effects.
+
+  Limitation: No spring physics. Limited to predefined easing functions
+  and keyframe percentages. Cannot react to interruption dynamically.
+
+
+7.4 — LENIS (Smooth Scroll)
+────────────────────────────
+
+  Not an animation library per se, but a smooth scrolling layer that pairs
+  with GSAP ScrollTrigger to provide buttery-smooth scroll behavior.
+  Essential for Awwwards-grade scroll experiences.
+
+  Provides a virtual scroll position that updates with interpolation,
+  eliminating the browser's native "chunky" scroll steps.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: ACCESSIBILITY — THE NON-NEGOTIABLE LAYER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8.1 — prefers-reduced-motion
+────────────────────────────
+
+Users with vestibular disorders (affecting the inner ear balance system) can
+experience severe dizziness, nausea, and vertigo from web animations —
+especially parallax scrolling, rapid scaling, and large viewport movements.
+
+MANDATORY IMPLEMENTATION:
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  In JavaScript:
+  const reducedMotion = window.matchMedia(
+    '(prefers-reduced-motion: reduce)'
+  ).matches;
+
+  if (reducedMotion) {
+    // Disable spring animations, use instant transitions
+    // Replace parallax with static layouts
+    // Replace auto-play carousels with static slides
+  }
+
+MOTION-ENGINE GUARDRAIL:
+  Every motion.md output MUST include a reduced-motion section that provides
+  fallback behavior for all specified animations. This is not optional.
+  The LLM must generate both the full animation AND its reduced-motion
+  counterpart.
+
+
+8.2 — WCAG COMPLIANCE RULES
+────────────────────────────
+
+  WCAG 2.3.3 (Animation from Interactions):
+    Motion triggered by interaction can be disabled unless the motion is
+    essential to the functionality.
+
+  WCAG 2.2.2 (Pause, Stop, Hide):
+    For auto-playing animations lasting > 5 seconds, users must be able
+    to pause, stop, or hide them.
+
+  WCAG 2.3.1 (Three Flashes):
+    No content shall flash more than 3 times per second.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: THE TELEMETRY ENGINE — HOW TO SCRAPE REAL PHYSICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9.1 — WHAT WE EXTRACT AND WHY
+──────────────────────────────
+
+When a user provides a reference URL (e.g., stripe.com, linear.app), the
+telemetry engine must capture the EXACT computed motion parameters.
+
+  DATA POINTS PER FRAME:
+  1. transform (matrix3d string) → decompose to translate, rotate, scale
+  2. opacity (0.0–1.0)
+  3. box-shadow (diffusion, spread, offset, color at state A vs state B)
+  4. filter (blur, brightness, contrast values)
+  5. clip-path (if used for reveal effects)
+  6. Timestamp (performance.now() for sub-ms precision)
+
+  COMPUTED DERIVATIVES:
+  7. Velocity (dx/dt, dy/dt) — first derivative of position
+  8. Acceleration (d²x/dt²) — second derivative of position
+  9. Easing curve reconstruction — fit sampled data to bezier/spring model
+
+
+9.2 — THE CDP INJECTION PAYLOAD
+────────────────────────────────
+
+The headless browser injects this JS into the target page:
+
+  (function(selector) {
+    const el = document.querySelector(selector);
+    const frames = [];
+    let startTime = null;
+
+    function capture(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const style = window.getComputedStyle(el);
+
+      frames.push({
+        t: timestamp - startTime,
+        transform: style.transform,
+        opacity: parseFloat(style.opacity),
+        boxShadow: style.boxShadow,
+        filter: style.filter,
+        rect: el.getBoundingClientRect().toJSON()
+      });
+
+      if (timestamp - startTime < 2000) {  // capture 2 seconds
+        requestAnimationFrame(capture);
+      } else {
+        window.__MOTION_TELEMETRY__ = frames;
+      }
+    }
+
+    // Trigger the animation
+    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    // OR: scroll viewport to trigger IntersectionObserver
+    requestAnimationFrame(capture);
+  })('.target-selector');
+
+  After capture, the Rust server reads window.__MOTION_TELEMETRY__ via CDP
+  and processes the frame array.
+
+
+9.3 — SPRING PARAMETER FITTING
+───────────────────────────────
+
+Given sampled position data [x(t0), x(t1), ..., x(tN)], the server must
+reverse-engineer the spring parameters (k, c, m) that produced this motion.
+
+  Method: Nonlinear least-squares fitting (Levenberg-Marquardt algorithm)
+
+  The solver minimizes:
+    sum over i: (x_observed(ti) - x_spring(ti; k, c, m))²
+
+  Where x_spring(ti; k, c, m) is the analytical solution to the damped
+  harmonic oscillator for the given parameters.
+
+  For underdamped case:
+    x(t) = A * e^(-gamma*t) * cos(omega_d*t + phi)
+    where gamma = c/(2m), omega_d = sqrt(k/m - gamma²)
+
+  For critically/overdamped:
+    x(t) = (A + B*t) * e^(-gamma*t)
+
+  This allows the motion-engine to extract EXACT spring parameters from
+  any website's animation, converting them into Framer Motion or GSAP configs.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 10: THE NOISE FUNCTION — DETERMINISTIC UNIQUENESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+10.1 — THE PROBLEM WITH IDENTICAL SPRINGS
+─────────────────────────────────────────
+
+If every button on a page uses stiffness=300, damping=20, mass=1, the page
+feels robotic. Every element moves identically. Real physical objects don't
+behave this way — a heavy glass moves differently from a light pen.
+
+10.2 — THE SEED FUNCTION
+─────────────────────────
+
+  seed = class_name.len()    // e.g., "btn-primary" → 11
+  noise = (seed % 5) * 0.5   // noise ∈ {0, 0.5, 1.0, 1.5, 2.0}
+
+  k_final = k_base ± noise
+  c_final = c_base ± (noise * 0.3)
+
+  This means:
+  - ".btn" (len=4):           k = 300 ± 2.0,   c = 20 ± 0.6
+  - ".btn-primary" (len=12):  k = 300 ± 1.0,   c = 20 ± 0.3
+  - ".card-hero" (len=9):     k = 300 ± 2.0,   c = 20 ± 0.6
+  - ".nav-link" (len=8):      k = 300 ± 1.5,   c = 20 ± 0.45
+
+  PROPERTIES OF THIS APPROACH:
+  1. DETERMINISTIC — Same class name always produces same parameters.
+     Re-running the tool gives identical results (reproducible builds).
+  2. UNIQUE — Different class names produce subtly different motion.
+  3. BOUNDED — The noise is small enough to maintain design coherence.
+  4. DEBUGGABLE — If motion feels wrong, the developer can trace the
+     exact seed value and adjust.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 11: AWWWARDS-LEVEL MOTION PATTERNS (REFERENCE CATALOG)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+11.1 — THE SCROLL REVEAL
+─────────────────────────
+  Element fades up from below as it enters the viewport.
+  Physics: translateY(40px) → translateY(0), opacity 0 → 1
+  Spring: k=250, c=25, m=1 (critically damped, no bounce)
+  Trigger: IntersectionObserver at threshold 0.1
+
+11.2 — THE PARALLAX DEPTH
+──────────────────────────
+  Background layers move slower than foreground layers.
+  Physics: translateY(scrollPosition * speed_factor)
+  speed_factor: 0.1 (far background) to 0.8 (near foreground)
+  Implementation: CSS scroll-driven animation or GSAP ScrollTrigger
+  NEVER: scroll event listener with getBoundingClientRect()
+
+11.3 — THE CARD HOVER LIFT
+───────────────────────────
+  Card elevates with shadow diffusion on hover.
+  Physics: translateY(-8px), shadow expand via pseudo-element opacity
+  Spring: k=400, c=18, m=0.8 (slightly underdamped, subtle bounce)
+  Shadow: Use pseudo-element trick (Part 3.4)
+
+11.4 — THE STAGGERED GRID
+──────────────────────────
+  Grid items cascade in with staggered delays.
+  Physics: translateY(30px) + opacity 0 → visible
+  Stagger: 50ms per element (max total: 500ms for 10 items)
+  Spring: k=300, c=22, m=1
+
+11.5 — THE MAGNETIC CURSOR
+───────────────────────────
+  Elements subtly attract toward the cursor on hover.
+  Physics: Element center interpolates toward cursor position
+  Formula: position = lerp(center, cursor, 0.15)
+  Must use requestAnimationFrame, not mousemove handler alone.
+  GPU: transform: translate(dx, dy) only.
+
+11.6 — THE TEXT REVEAL (Split + Stagger)
+────────────────────────────────────────
+  Text splits into characters/words that animate in individually.
+  Physics: Each char: translateY(100%) + opacity 0 → visible
+  Stagger: 20–40ms per character
+  Spring: k=350, c=20, m=0.5 (light, quick characters)
+  Library: GSAP SplitText or custom split utility
+
+11.7 — THE 3D CARD TILT
+────────────────────────
+  Card rotates in 3D following cursor position within the card.
+  Physics: rotateX/rotateY based on cursor offset from card center
+  Formula:
+    rotateY = (cursorX - centerX) / (width/2) * maxRotation
+    rotateX = -(cursorY - centerY) / (height/2) * maxRotation
+    maxRotation: 10–20 degrees
+  Perspective: 800–1000px on parent
+  transform-style: preserve-3d on card
+
+11.8 — THE SMOOTH PAGE TRANSITION
+─────────────────────────────────
+  Outgoing page slides/fades out, incoming page slides/fades in.
+  Physics: Old page: translateX(-30%) + opacity 0 (accelerate out)
+           New page: translateX(30%) → translateX(0) + opacity 1 (decelerate in)
+  Spring: k=200, c=28, m=1.2 (overdamped, smooth, no bounce)
+  Duration: 400–600ms total
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 12: ANTI-PATTERN BLACKLIST — WHAT THE LLM MUST NEVER DO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────┬──────────────────────────────────────────────────────────────────┐
+  │ ## │ BANNED PATTERN                                                  │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  1 │ transition: all 0.3s ease;                                      │
+  │    │ → Causes reflows, animates unintended properties.               │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  2 │ Animating width, height, top, left, margin, padding             │
+  │    │ → Triggers full Layout stage. Use transform: translate/scale.   │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  3 │ Animating box-shadow directly                                   │
+  │    │ → Triggers Paint. Use pseudo-element opacity trick.             │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  4 │ Using scroll event listener for animation                       │
+  │    │ → Fires on every pixel, thrashes main thread.                   │
+  │    │ → Use IntersectionObserver or CSS scroll-driven animations.     │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  5 │ Reading layout props inside rAF loop (layout thrashing)         │
+  │    │ → offsetWidth, getBoundingClientRect() inside animation loop    │
+  │    │ → causes forced synchronous layout every frame.                 │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  6 │ will-change on many elements simultaneously                     │
+  │    │ → Each promoted layer consumes GPU VRAM. Causes worse perf.     │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  7 │ overflow: hidden on parent of preserve-3d element               │
+  │    │ → DESTROYS the 3D rendering context. Children flatten to 2D.   │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  8 │ Ignoring prefers-reduced-motion                                 │
+  │    │ → Accessibility violation. Can cause physical harm.             │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │  9 │ Using setTimeout/setInterval for animation                      │
+  │    │ → Not synced to display refresh. Use requestAnimationFrame.     │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │ 10 │ Linear easing (animation-timing-function: linear)               │
+  │    │ → No object in reality moves at constant speed. Feels robotic.  │
+  │    │ → Exception: Infinite looping animations (spinners, marquees).  │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │ 11 │ Animating text content (innerHTML) for visual effect            │
+  │    │ → Triggers full style + layout + paint cascade.                 │
+  │    │ → Use SplitText and transform individual characters.            │
+  ├────┼──────────────────────────────────────────────────────────────────┤
+  │ 12 │ Flash rate > 3 per second                                       │
+  │    │ → Can trigger photosensitive seizures. WCAG violation.          │
+  └────┴──────────────────────────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 13: THE motion.md OUTPUT SPECIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The MCP server's ultimate output is a structured motion.md file that the LLM
+must treat as IMMUTABLE LAW. Its structure:
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ ## SPATIAL ENVIRONMENT                                                  │
+  │ perspective: 800px                                                      │
+  │ perspective-origin: center                                              │
+  │ transform-style: preserve-3d                                            │
+  │ overflow: visible (on 3D parent containers)                             │
+  │                                                                         │
+  │ ## PHYSICS BLOCK                                                        │
+  │ source: telemetry | solver                                              │
+  │ target: .hero-card                                                      │
+  │ stiffness: 285                                                          │
+  │ damping: 22.3                                                           │
+  │ mass: 1.1                                                               │
+  │ damping_ratio: 0.63 (underdamped)                                       │
+  │ initial_displacement: { y: 40px, opacity: 0 }                           │
+  │ equilibrium: { y: 0px, opacity: 1 }                                     │
+  │                                                                         │
+  │ ## THEMATIC HARMONIZATION                                               │
+  │ typography: sans-serif → standard motion range                          │
+  │ brand_tempo: saas (scale: 1.2)                                          │
+  │ constraint: no rotations > 15deg on text elements                       │
+  │ constraint: stagger delay 50ms for list items                           │
+  │                                                                         │
+  │ ## PERFORMANCE MANDATES                                                 │
+  │ animate_only: transform, opacity                                        │
+  │ will_change: transform (apply before, remove after)                     │
+  │ shadow_method: pseudo-element opacity trick                             │
+  │ scroll_method: IntersectionObserver (threshold 0.1, rootMargin -50px)   │
+  │                                                                         │
+  │ ## IMPLEMENTATION LIBRARY                                               │
+  │ primary: framer-motion (spring)                                         │
+  │ fallback: gsap (CustomEase)                                             │
+  │                                                                         │
+  │ ## ACCESSIBILITY                                                        │
+  │ reduced_motion_fallback: instant transition (0ms)                       │
+  │ auto_play_control: pause button required                                │
+  │ flash_rate: < 3 per second                                              │
+  │                                                                         │
+  │ ## LLM EXECUTION GUARDRAILS                                             │
+  │ 1. READ this spec BEFORE writing any animation code.                    │
+  │ 2. DO NOT use transition: all.                                          │
+  │ 3. DO NOT animate width, height, top, left, margin, padding.            │
+  │ 4. MUST use spring parameters from PHYSICS BLOCK.                       │
+  │ 5. MUST include prefers-reduced-motion fallback.                        │
+  │ 6. MUST use will-change: transform on animated elements.                │
+  │ 7. MUST use pseudo-element trick for shadow animations.                 │
+  │ 8. This spec is IMMUTABLE. Do not deviate.                              │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 14: ARCHITECTURE DECISION RECORD — POTENTIAL WEAKNESSES & MITIGATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+14.1 — WEAKNESS: Telemetry may miss JS-driven animations
+  Modern sites use GSAP/Framer Motion which compute transforms in JS and
+  apply them directly, bypassing CSS transitions entirely. The telemetry
+  engine sees the RESULT (matrix3d) but not the INTENT (spring parameters).
+  MITIGATION: The spring parameter fitting algorithm (Part 9.3) can
+  reverse-engineer the physical constants from sampled position data.
+
+14.2 — WEAKNESS: Headless Chrome overhead
+  Spawning a chromium instance is heavy (500MB+ RAM, 2-5s startup).
+  MITIGATION: Use lightweight CDP over WebSocket to connect to an existing
+  browser, or download a minimal chromium binary on first run only.
+
+14.3 — WEAKNESS: Sites may require interaction to trigger animations
+  Many animations only fire on hover, click, or specific scroll positions.
+  MITIGATION: The telemetry engine must simulate events:
+  - dispatchEvent(new MouseEvent('mouseenter'))
+  - window.scrollTo(0, targetY) for scroll triggers
+  - element.click() for click-triggered reveals
+
+14.4 — WEAKNESS: The noise function is simplistic
+  Using class_name.len() as a seed is deterministic but crude. Classes like
+  "a" and "b" both have len=1, producing identical parameters.
+  MITIGATION: Use a proper hash of the class name string (e.g., FNV-1a)
+  modulo the noise range. This distributes uniqueness more evenly:
+    seed = fnv1a_hash(class_name) % 10
+    noise = seed * 0.25  // range: 0 to 2.25
+
+14.5 — WEAKNESS: Not all LLMs obey guardrails perfectly
+  Even with explicit instructions, LLMs may still produce banned patterns
+  in edge cases or under prompt pressure.
+  MITIGATION: The MCP response should include both the motion.md AND a
+  system prompt injection that overrides any conflicting user instructions.
+  The guardrails become part of the LLM's operational context, not just
+  a reference document.
+
+14.6 — WEAKNESS: Spring solver assumes single-axis motion
+  Real UI motion is often multi-axis (translateX + translateY + rotate +
+  scale simultaneously). The Hooke's Law solver must handle each axis
+  independently with potentially different parameters.
+  MITIGATION: Model as N independent spring systems, one per animated
+  property. The motion.md output specifies parameters per-axis.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 15: COMPETITIVE LANDSCAPE — WHAT ELSE EXISTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────┬──────────────────────────────┬──────────────────┐
+  │ Approach           │ What It Does                 │ Gap              │
+  ├────────────────────┼──────────────────────────────┼──────────────────┤
+  │ v0.dev / bolt.new  │ Generates UI with AI         │ No physics       │
+  │                    │ (static animations only)     │ awareness        │
+  ├────────────────────┼──────────────────────────────┼──────────────────┤
+  │ Figma Smart        │ Design tool with animation   │ No code output,  │
+  │ Animate            │ prototyping                  │ no spring math   │
+  ├────────────────────┼──────────────────────────────┼──────────────────┤
+  │ Rive               │ Design + runtime animation   │ Separate tool,   │
+  │                    │ with state machines          │ not LLM-native   │
+  ├────────────────────┼──────────────────────────────┼──────────────────┤
+  │ Lottie             │ After Effects → Web export   │ Not procedural,  │
+  │                    │                              │ fixed keyframes  │
+  ├────────────────────┼──────────────────────────────┼──────────────────┤
+  │ motion-engine-mcp  │ Physics solver + telemetry   │ THIS PROJECT     │
+  │ (this project)     │ + LLM guardrails as MCP      │ Fills all gaps   │
+  │                    │ server                       │                  │
+  └────────────────────┴──────────────────────────────┴──────────────────┘
+
+  NO OTHER TOOL combines:
+  1. Real-time telemetry extraction from live websites
+  2. Parametric spring physics solver
+  3. Local design system awareness
+  4. Structured output for LLM consumption
+  5. Strict performance guardrails
+
+  This is a genuinely novel approach. The closest concept is "design tokens
+  for motion" but no existing solution operates at the MCP protocol level
+  to inject physics awareness into the LLM's generation pipeline.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 16: SUMMARY — THE MOTION-ENGINE THESIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Animation is not decoration. It is physics simulation.
+  2. The human eye detects non-physical motion within 100ms.
+  3. Springs replace bezier curves for ALL interactive motion.
+  4. Only transform and opacity may be animated (GPU compositing).
+  5. Every animation needs a reduced-motion fallback.
+  6. Stiffness maps to element importance.
+  7. Damping maps to brand personality.
+  8. Mass maps to visual weight.
+  9. Typography constrains maximum animation speed.
+  10. Deterministic noise ensures uniqueness without randomness.
+  11. The LLM must be FORCED to read motion.md before writing code.
+  12. The MCP server is the physicist the LLM never had.
+
+================================================================================
+  END OF BRAINSTORM
+================================================================================

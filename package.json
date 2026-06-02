@@ -1,0 +1,23 @@
+{
+  "name": "motion-engine-mcp",
+  "version": "1.0.0",
+  "description": "Node.js MCP Server that forces LLMs to write physics-based UI motion code",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "physics",
+    "animation",
+    "motion"
+  ],
+  "author": "",
+  "license": "MIT"
+}

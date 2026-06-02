@@ -1,0 +1,102 @@
+SYSTEM INSTRUCTION: PROJECT OMNIBUS
+
+To the AI Coding Agent: You are tasked with building a Rust-based Model Context Protocol (MCP) Server named motion-engine-mcp. This tool forces LLMs to write Awwwards-level, high-performance UI motion code by eliminating generic AI defaults and replacing them with deterministic physics, headless browser telemetry, and dynamic spring math.
+
+Execute this build in the exact order below, from Phase 1 (Standard Setup) to Phase 5 (Core Execution Architecture).
+
+PHASE 1: Scaffolding & Dependencies (Least Important / Foundational)
+
+Initialize a new Rust async binary project.
+
+Crate Setup: Use tokio (async runtime), serde / serde_json (data structures).
+
+Browser Engine: Use headless_chrome or playwright-rs for lightweight CDP (Chrome DevTools Protocol) interaction.
+
+MCP SDK: Implement a standard MCP server interface using stdio transport.
+
+File System: Set up read/write capabilities to scan local workspace directories and output .md files.
+
+PHASE 2: Local Context & Brand Scraper (Medium-Low Importance)
+
+Before generating any motion, the server must understand the local project.
+
+Create a ContextScanner struct:
+
+Scan for tailwind.config.js, theme.json, or .css root variables.
+
+Look for a client_brief.md or design_system.md in the root directory.
+
+Output Map: Parse this into a local theme profile:
+
+Typography classification (Serif/Sans-serif impacts layout shift weight).
+
+Base animation tempo (e.g., luxury = slower, SaaS = snappy).
+
+Color tokens (for shadow interpolation).
+
+PHASE 3: The Headless Telemetry Engine [Reference Mode] (Medium-High Importance)
+
+When the user provides a reference URL, the MCP server must scrape the actual physics, not screenshots.
+
+Browser Spawner: Launch an ephemeral headless chromium instance.
+
+CDP Injection: Inject a JS payload that sets up IntersectionObserver and requestAnimationFrame loops.
+
+Data Extraction: Target a specific CSS selector provided by the user. Track and return:
+
+matrix3d and translate3d arrays over a scroll percentage or time delta.
+
+Easing curves extracted from computed styles.
+
+Opacity and shadow diffusion (box-shadow coordinates at state $A$ vs state $B$).
+
+PHASE 4: The Generative Math Engine [Zero-Reference Mode] (High Importance)
+
+If the user does NOT provide a reference URL, DO NOT fallback to generic AI CSS.
+
+The MCP Interactive Prompt: Expose an MCP prompt workflow that asks the user 3 questions if context is missing:
+
+Kinetic Weight (Heavy/Grounded vs Light/Floating)
+
+Trigger Geometry (Scroll, Hover, Time)
+
+Spatial Plane (2D vs 2.5D)
+
+The Parametric Spring Solver: Generate physics dynamically to ensure no two outputs are identical.
+
+Implement standard spring physics:
+
+
+$$F = -kx - cv$$
+
+Where $k$ is stiffness, $c$ is damping, $v$ is velocity, and $x$ is displacement.
+
+Inject minor randomized mathematical noise (e.g., $k \pm 2.5$) based on the string length of the target element's class name.
+
+Output these dynamic parameters (stiffness, damping, mass) instead of static bezier curves.
+
+PHASE 5: The motion.md Compiler & AI Guardrails (CRITICAL / Most Important)
+
+The ultimate output of this MCP server is a structured markdown file (motion.md) and a set of system instructions passed back to the LLM environment.
+
+Expose MCP Tools:
+
+generate_motion_spec(url: Option<String>, selector: String, intent: Option<String>)
+
+Compile the Spec: The tool must generate and save a motion.md file in the user's workspace containing:
+
+Spatial Environment: Strict perspective and overflow guardrails.
+
+Physics Block: The raw matrix arrays (Phase 3) OR the dynamic spring variables (Phase 4).
+
+Thematic Harmonization: Rules derived from Phase 2 (e.g., "Do not use fast rotations on Serif typography").
+
+The LLM Execution Guardrail (Append to MCP response):
+
+Force the LLM to use GSAP or Framer Motion for complex timelines.
+
+BAN the use of transition: all 0.3s ease.
+
+FORCE hardware acceleration (e.g., will-change: transform).
+
+COMMAND the LLM to strictly read motion.md as immutable mathematical law before writing frontend code.
