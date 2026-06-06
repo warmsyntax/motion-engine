@@ -32,54 +32,141 @@ This single line contains multiple design and performance anti-patterns:
 
 ---
 
-## ⚡ Quick Start (Single-Command Setup)
+## ⚡ Quick Start & Setup Guide
 
-Setting up `motion-engine-mcp` takes less than 30 seconds. Open your terminal in this directory and run:
-
-```bash
-node setup.js
-```
-
-### What this script does automatically:
-1. **Installs Dependencies**: Installs the lightweight Puppeteer headless browser module.
-2. **Performs Math Validation**: Executes a comprehensive test suite (`test.js`) verifying matrix decompositions, FNV-1a noise algorithms, Euler integration models, and oscillator fit parameters.
-3. **Claude Auto-Registration**: Detects your local **Claude Desktop config** and registers `motion-engine` directly into it so you can start animating immediately.
+You can run `motion-engine-mcp` using one of two methods:
 
 ---
 
-## 🔌 MCP Client Integration Manual
+### 🚀 Option 1: Zero-Clone Execution via `npx` (Recommended)
 
-### 1. Claude Desktop (Automated or Manual)
-If the auto-installer could not write to your configuration, add this server block to your `claude_desktop_config.json` manually:
+No need to clone the repository or manually install node modules. You can run the server directly using `npx` fetching from GitHub.
 
+#### 1. Claude Desktop Setup
+Open your Claude Desktop configuration file:
 * **Windows Path**: `%APPDATA%\Claude\claude_desktop_config.json`
 * **macOS Path**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
+Add the following to your `mcpServers` block:
 ```json
 {
   "mcpServers": {
     "motion-engine": {
-      "command": "node",
-      "args": ["/absolute/path/to/motion-engine/index.js"]
+      "command": "npx",
+      "args": ["-y", "github:warmsyntax/motion-engine"]
     }
   }
 }
 ```
 
-### 2. Cursor Editor / IDE
+#### 2. Cursor IDE Setup
 1. Open Cursor and go to **Settings** → **Features** → **MCP**.
 2. Click **+ Add New MCP Server**.
-3. Fill in the configuration:
+3. Configure as follows:
    - **Name**: `motion-engine`
    - **Type**: `stdio`
-   - **Command**: `node /absolute/path/to/motion-engine/index.js`
+   - **Command**: `npx -y github:warmsyntax/motion-engine`
 4. Click **Save**.
 
-### 3. Gemini CLI / Codex / Claude Code
-Load the server through standard stdio transport using `node`:
+#### 3. Claude Code Setup
+Run the following command in your terminal to register the server:
 ```bash
-gemini-cli --mcp node /absolute/path/to/motion-engine/index.js
+claude mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
 ```
+
+#### 4. Gemini CLI Setup
+Open your Gemini CLI settings file at `~/.gemini/settings.json` and add the server to your `mcpServers` configuration:
+```json
+{
+  "mcpServers": {
+    "motion-engine": {
+      "command": "npx",
+      "args": ["-y", "github:warmsyntax/motion-engine"]
+    }
+  }
+}
+```
+
+#### 5. Codex Setup
+Add the server using the Codex CLI tool:
+```bash
+codex mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
+```
+Alternatively, write it directly in your `~/.codex/config.toml` configuration.
+
+#### 6. OpenCode Setup
+Add the server via the OpenCode CLI:
+```bash
+opencode mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
+```
+Alternatively, add it manually under the `mcp` block in your `~/.config/opencode/opencode.json`:
+```json
+{
+  "mcp": {
+    "motion-engine": {
+      "command": "npx",
+      "args": ["-y", "github:warmsyntax/motion-engine"]
+    }
+  }
+}
+```
+
+---
+
+### 💻 Option 2: Local Clone & Setup (For Contributors & Devs)
+
+If you have cloned the repository locally to a folder (e.g. `F:/motionplugin` or `~/motion-design`), follow these steps:
+
+#### 1. Install Dependencies & Run Setup
+Open your terminal in the cloned directory and run the single-command setup:
+```bash
+npm install && npm run setup
+```
+> [!NOTE]
+> This command installs all dependencies (including Puppeteer), runs the verification test suite, and attempts to automatically register the local path into your **Claude Desktop** config.
+
+#### 2. Configure Clients Manually with Local Path
+If you need to configure your IDE or other clients to use the local clone:
+
+* **Claude Desktop (`claude_desktop_config.json`)**:
+  ```json
+  "mcpServers": {
+    "motion-engine": {
+      "command": "node",
+      "args": ["/absolute/path/to/your/cloned/motion-engine/index.js"]
+    }
+  }
+  ```
+  *(Remember to replace `/absolute/path/to/your/cloned/motion-engine/index.js` with the actual full absolute path on your filesystem, e.g. `F:/motionplugin/index.js` on Windows)*
+
+* **Cursor IDE**:
+  - **Name**: `motion-engine`
+  - **Type**: `stdio`
+  - **Command**: `node /absolute/path/to/your/cloned/motion-engine/index.js`
+
+* **Claude Code**:
+  ```bash
+  claude mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  ```
+
+* **Gemini CLI**:
+  Add this to your `~/.gemini/settings.json` under `mcpServers`:
+  ```json
+  "motion-engine": {
+    "command": "node",
+    "args": ["/absolute/path/to/your/cloned/motion-engine/index.js"]
+  }
+  ```
+
+* **Codex**:
+  ```bash
+  codex mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  ```
+
+* **OpenCode**:
+  ```bash
+  opencode mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  ```
 
 ---
 

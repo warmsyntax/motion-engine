@@ -4,9 +4,13 @@
   "description": "Node.js MCP Server that forces LLMs to write physics-based UI motion code",
   "main": "index.js",
   "type": "module",
+  "bin": {
+    "motion-engine-mcp": "./index.js"
+  },
   "scripts": {
     "start": "node index.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "setup": "node setup.js"
   },
   "dependencies": {
     "puppeteer": "^22.0.0"
