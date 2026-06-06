@@ -75,7 +75,11 @@ claude mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
 ```
 
 #### 4. Gemini CLI Setup
-Open your Gemini CLI settings file at `~/.gemini/settings.json` and add the server to your `mcpServers` configuration:
+Run the following command in your terminal to register the server:
+```bash
+gemini mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
+```
+Alternatively, open your Gemini CLI settings file at `~/.gemini/settings.json` and add manually to your `mcpServers` configuration:
 ```json
 {
   "mcpServers": {
@@ -95,17 +99,20 @@ codex mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
 Alternatively, write it directly in your `~/.codex/config.toml` configuration.
 
 #### 6. OpenCode Setup
-Add the server via the OpenCode CLI:
+Run the interactive setup wizard via the OpenCode CLI:
 ```bash
-opencode mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
+opencode mcp add
 ```
+When prompted, enter: **Name**: `motion-engine`, **Type**: `local`, **Command**: `npx -y github:warmsyntax/motion-engine`.
+
 Alternatively, add it manually under the `mcp` block in your `~/.config/opencode/opencode.json`:
 ```json
 {
   "mcp": {
     "motion-engine": {
-      "command": "npx",
-      "args": ["-y", "github:warmsyntax/motion-engine"]
+      "type": "local",
+      "command": ["npx", "-y", "github:warmsyntax/motion-engine"],
+      "enabled": true
     }
   }
 }
@@ -150,7 +157,10 @@ If you need to configure your IDE or other clients to use the local clone:
   ```
 
 * **Gemini CLI**:
-  Add this to your `~/.gemini/settings.json` under `mcpServers`:
+  ```bash
+  gemini mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  ```
+  Or add manually to your `~/.gemini/settings.json` under `mcpServers`:
   ```json
   "motion-engine": {
     "command": "node",
@@ -164,8 +174,19 @@ If you need to configure your IDE or other clients to use the local clone:
   ```
 
 * **OpenCode**:
+  Run the interactive setup wizard:
   ```bash
-  opencode mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  opencode mcp add
+  ```
+  When prompted, enter: **Name**: `motion-engine`, **Type**: `local`, **Command**: `node /absolute/path/to/your/cloned/motion-engine/index.js`.
+
+  Or add manually in your `~/.config/opencode/opencode.json` under the `mcp` block:
+  ```json
+  "motion-engine": {
+    "type": "local",
+    "command": ["node", "/absolute/path/to/your/cloned/motion-engine/index.js"],
+    "enabled": true
+  }
   ```
 
 ---
