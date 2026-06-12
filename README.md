@@ -77,7 +77,7 @@ claude mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
 #### 4. Gemini CLI Setup
 Run the following command in your terminal to register the server:
 ```bash
-gemini mcp add motion-engine -- npx -y github:warmsyntax/motion-engine
+gemini mcp add motion-engine npx -y github:warmsyntax/motion-engine
 ```
 Alternatively, open your Gemini CLI settings file at `~/.gemini/settings.json` and add manually to your `mcpServers` configuration:
 ```json
@@ -105,7 +105,7 @@ opencode mcp add
 ```
 When prompted, enter: **Name**: `motion-engine`, **Type**: `local`, **Command**: `npx -y github:warmsyntax/motion-engine`.
 
-Alternatively, add it manually under the `mcp` block in your `~/.config/opencode/opencode.json`:
+Alternatively, add it manually under the `mcp` block in your `~/.config/opencode/opencode.jsonc`:
 ```json
 {
   "mcp": {
@@ -158,7 +158,7 @@ If you need to configure your IDE or other clients to use the local clone:
 
 * **Gemini CLI**:
   ```bash
-  gemini mcp add motion-engine -- node /absolute/path/to/your/cloned/motion-engine/index.js
+  gemini mcp add motion-engine node /absolute/path/to/your/cloned/motion-engine/index.js
   ```
   Or add manually to your `~/.gemini/settings.json` under `mcpServers`:
   ```json
@@ -180,7 +180,7 @@ If you need to configure your IDE or other clients to use the local clone:
   ```
   When prompted, enter: **Name**: `motion-engine`, **Type**: `local`, **Command**: `node /absolute/path/to/your/cloned/motion-engine/index.js`.
 
-  Or add manually in your `~/.config/opencode/opencode.json` under the `mcp` block:
+  Or add manually in your `~/.config/opencode/opencode.jsonc` under the `mcp` block:
   ```json
   "motion-engine": {
     "type": "local",

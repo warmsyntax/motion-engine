@@ -279,6 +279,14 @@ export async function handleMcpRequest(reqVal) {
     }
 
     default:
+      // MCP notifications (e.g. notifications/initialized, notifications/cancelled)
+      // are one-way messages with no `id` field. Per the JSON-RPC 2.0 and MCP specs,
+      // the server MUST NOT send any response for notifications.
+      if (method.startsWith('notifications/')) {
+        console.error(`[motion-engine] Received notification: ${method} (acknowledged, no response sent)`);
+        return null;
+      }
+
       return {
         jsonrpc: '2.0',
         id,

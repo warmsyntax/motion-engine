@@ -28,7 +28,10 @@ rl.on('line', async (line) => {
 
   try {
     const response = await handleMcpRequest(request);
-    console.log(JSON.stringify(response));
+    // Notifications return null — do not write anything to stdout for them
+    if (response !== null) {
+      console.log(JSON.stringify(response));
+    }
   } catch (err) {
     const errorResponse = {
       jsonrpc: '2.0',
