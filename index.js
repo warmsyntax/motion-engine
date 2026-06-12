@@ -6,7 +6,7 @@ console.error('[motion-engine] Starting Model Context Protocol (MCP) Server (Nod
 
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout,
+  output: process.stderr,
   terminal: false
 });
 
