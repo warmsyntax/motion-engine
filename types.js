@@ -12,7 +12,10 @@ export const TriggerType = {
   SCROLL_SCRUB: 'scroll_scrub',
   HOVER: 'hover',
   TIME: 'time',
-  CLICK: 'click'
+  CLICK: 'click',
+  FOCUS: 'focus',
+  DRAG: 'drag',
+  PRESS: 'press'
 };
 
 export const KineticWeight = {
@@ -75,12 +78,16 @@ export class ThemeProfile {
     typography_class = TypographyClass.SANS_SERIF,
     font_weight = 400,
     tempo_scale = 1.0,
-    color_tokens = []
+    color_tokens = [],
+    stiffness_override_cap = null,
+    damping_override_min = null
   } = {}) {
     this.typography_class = typography_class;
     this.font_weight = font_weight;
     this.tempo_scale = tempo_scale;
     this.color_tokens = color_tokens; // Array of { name, value }
+    this.stiffness_override_cap = stiffness_override_cap;
+    this.damping_override_min = damping_override_min;
   }
 
   /// Font weight → mass multiplier per motion.txt Part 4.4
@@ -94,6 +101,9 @@ export class ThemeProfile {
 
   /// Typography class → max stiffness constraint
   getMaxStiffness() {
+    if (this.stiffness_override_cap !== null) {
+      return this.stiffness_override_cap;
+    }
     switch (this.typography_class) {
       case TypographyClass.SERIF:
       case TypographyClass.DISPLAY:
@@ -107,6 +117,9 @@ export class ThemeProfile {
 
   /// Typography class → min damping constraint
   getMinDamping() {
+    if (this.damping_override_min !== null) {
+      return this.damping_override_min;
+    }
     switch (this.typography_class) {
       case TypographyClass.SERIF:
       case TypographyClass.DISPLAY:

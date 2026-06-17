@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ThemeProfile, TypographyClass } from './types.js';
+import { scanForHallmarkDesign, getHallmarkThematicModifications } from './integration/hallmark_bridge.js';
 
 /// Helper to recursively find CSS files in a directory up to a specific depth
 function findCssFiles(dir, depth = 0, maxDepth = 3) {
@@ -94,6 +95,25 @@ export function scanWorkspace(rootDir = '.') {
       profile = parseCssVars(content, profile);
     } catch (err) {
       // Ignore read errors
+    }
+  }
+
+  // 5. Integrate Hallmark design overrides
+  const hallmarkProfile = scanForHallmarkDesign(rootDir);
+  if (hallmarkProfile) {
+    const mods = getHallmarkThematicModifications(hallmarkProfile);
+    profile.tempo_scale = mods.tempoScale;
+    profile.stiffness_override_cap = mods.stiffnessCap;
+    profile.damping_override_min = mods.dampingMin;
+    if (hallmarkProfile.type_pairing) {
+      const ty = hallmarkProfile.type_pairing.toLowerCase();
+      if (ty.includes('serif')) {
+        profile.typography_class = TypographyClass.SERIF;
+      } else if (ty.includes('display')) {
+        profile.typography_class = TypographyClass.DISPLAY;
+      } else if (ty.includes('sans')) {
+        profile.typography_class = TypographyClass.SANS_SERIF;
+      }
     }
   }
 

@@ -1,16 +1,91 @@
-import { scanWorkspace } from './context_scanner.js';
-import { runTelemetry } from './telemetry/index.js';
-import { solveScrollReveal, solveHoverLift } from './physics/spring_solver.js';
-import { fitAxisTelemetry } from './physics/spring_fitter.js';
-import { writeMotionSpecToWorkspace } from './compiler/motion_md.js';
-import { 
-  MotionSpec, 
-  SpatialPlane, 
-  KineticWeight, 
-  TriggerType, 
-  SpringAxis, 
-  SpatialEnvironment 
-} from './types.js';
+import * as generateMotionSpec from './tools/generate_motion_spec.js';
+import * as generateTextAnimation from './tools/generate_text_animation.js';
+import * as generateInteractionSpec from './tools/generate_interaction_spec.js';
+import * as generateScrollChoreography from './tools/generate_scroll_choreography.js';
+import * as validateMotionPerformance from './tools/validate_motion_performance.js';
+import * as assessMotionBudget from './tools/assess_motion_budget.js';
+
+// Static Tool Registry
+const toolsRegistry = {
+  [generateMotionSpec.name]: generateMotionSpec,
+  [generateTextAnimation.name]: generateTextAnimation,
+  [generateInteractionSpec.name]: generateInteractionSpec,
+  [generateScrollChoreography.name]: generateScrollChoreography,
+  [validateMotionPerformance.name]: validateMotionPerformance,
+  [assessMotionBudget.name]: assessMotionBudget
+};
+
+// Static Prompts Registry
+const promptsRegistry = {
+  motion_intent: {
+    name: 'motion_intent',
+    description: 'Three-question interactive workflow to establish the kinetic weight, trigger geometry, and spatial plane of an animation.',
+    arguments: [
+      {
+        name: 'kinetic_weight',
+        description: 'stiffness/damping profile: heavy, grounded, balanced, light, floating',
+        required: true
+      },
+      {
+        name: 'trigger_geometry',
+        description: 'trigger system: scroll, hover, time, scroll-scrub, click',
+        required: true
+      },
+      {
+        name: 'spatial_plane',
+        description: '3D dimensions: 2d, 2.5d',
+        required: true
+      }
+    ]
+  },
+  design_audit: {
+    name: 'design_audit',
+    description: 'Four-question guided design context and framework audit.',
+    arguments: [
+      {
+        name: 'project_type',
+        description: 'Landing / SaaS / E-commerce / Portfolio / Blog',
+        required: true
+      },
+      {
+        name: 'brand_personality',
+        description: 'Playful / Professional / Luxurious / Minimal / Bold',
+        required: true
+      },
+      {
+        name: 'framework',
+        description: 'React / Vue / Svelte / Vanilla / Astro / Next.js',
+        required: true
+      },
+      {
+        name: 'animations',
+        description: 'Scroll reveals / Hover effects / Page transitions / Text animations / All',
+        required: true
+      }
+    ]
+  },
+  component_motion: {
+    name: 'component_motion',
+    description: 'Quick three-question assistant for component-level motion specifications.',
+    arguments: [
+      {
+        name: 'component',
+        description: 'Button / Card / Modal / Nav / Hero / Form / Toast / Dropdown',
+        required: true
+      },
+      {
+        name: 'trigger',
+        description: 'Hover / Click / Scroll / Mount / Focus',
+        required: true
+      },
+      {
+        name: 'feel',
+        description: 'Snappy / Smooth / Bouncy / Heavy / Floating',
+        required: true
+      }
+    ]
+  }
+};
 
 /// Main JSON-RPC request dispatcher for the Model Context Protocol (MCP) server.
 export async function handleMcpRequest(reqVal) {
@@ -37,7 +112,7 @@ export async function handleMcpRequest(reqVal) {
           },
           serverInfo: {
             name: 'motion-engine-mcp',
-            version: '1.0.0'
+            version: '2.0.0'
           }
         }
       };
@@ -47,30 +122,11 @@ export async function handleMcpRequest(reqVal) {
         jsonrpc: '2.0',
         id,
         result: {
-          tools: [
-            {
-              name: 'generate_motion_spec',
-              description: 'Scrapes a reference URL or uses the Hooke\'s Law physics solver to compile an Awwwards-level motion.md spec with spring parameters and performance guardrails.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  url: {
-                    type: 'string',
-                    description: 'Optional reference website URL (e.g. stripe.com/payments) to extract real animation telemetry physics.'
-                  },
-                  selector: {
-                    type: 'string',
-                    description: 'CSS selector targeting the animated element (e.g. \'.hero-card\' or \'button.pay\').'
-                  },
-                  intent: {
-                    type: 'string',
-                    description: 'Optional kinetic weight intent (e.g. \'heavy\', \'grounded\', \'balanced\', \'light\', \'floating\') for zero-reference physics generation.'
-                  }
-                },
-                required: ['selector']
-              }
-            }
-          ]
+          tools: Object.values(toolsRegistry).map(t => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema
+          }))
         }
       };
 
@@ -79,133 +135,27 @@ export async function handleMcpRequest(reqVal) {
       const toolName = params.name;
       const argumentsVal = params.arguments || {};
 
-      if (toolName === 'generate_motion_spec') {
-        const selector = argumentsVal.selector;
-        if (!selector) {
-          return {
-            jsonrpc: '2.0',
-            id,
-            error: { code: -32602, message: 'Invalid params: selector is required' }
-          };
-        }
-
-        const urlOpt = argumentsVal.url;
-        const intentOpt = argumentsVal.intent;
-
-        // 1. Scan workspace root for local brand context
-        console.error('[motion-engine] Scanning local workspace...');
-        const theme = scanWorkspace('.');
-        console.error(`[motion-engine] Scan complete: Typography=${theme.typography_class}, TempoScale=${theme.tempo_scale}x`);
-
-        let spec = new MotionSpec({
-          target_selector: selector,
-          source: 'solver',
-          spatial_env: new SpatialEnvironment(),
-          physics_blocks: [],
-          thematic_rules: [],
-          trigger_type: TriggerType.SCROLL,
-          implementation_library: 'framer-motion',
-          scroll_method: 'IntersectionObserver'
-        });
-
-        // 2. Perform Telemetry if URL is provided
-        let telemetrySuccess = false;
-        if (urlOpt) {
-          console.error(`[motion-engine] Launching Puppeteer telemetry for URL: ${urlOpt}`);
-          try {
-            const { frames, trigger } = await runTelemetry(urlOpt, selector);
-            console.error(`[motion-engine] Telemetry captured ${frames.length} frames. Fitting springs...`);
-            
-            spec.source = 'telemetry';
-            spec.trigger_type = trigger;
-
-            const fittedBlocks = [];
-            const yFit = fitAxisTelemetry(frames, SpringAxis.TranslateY, theme);
-            if (yFit) fittedBlocks.push(yFit);
-
-            const opFit = fitAxisTelemetry(frames, SpringAxis.Opacity, theme);
-            if (opFit) fittedBlocks.push(opFit);
-
-            if (fittedBlocks.length > 0) {
-              spec.physics_blocks = fittedBlocks;
-              telemetrySuccess = true;
-              console.error(`[motion-engine] Curve fitting succeeded on ${spec.physics_blocks.length} axes.`);
-            } else {
-              console.error('[motion-engine] Telemetry did not produce meaningful motion shifts. Falling back to solver.');
-            }
-          } catch (err) {
-            console.error(`[motion-engine] Telemetry failed: ${err.message}. Falling back to solver.`);
-          }
-        }
-
-        // 3. Fallback to Generative Solver if Telemetry was not run or failed
-        if (!telemetrySuccess) {
-          console.error('[motion-engine] Running generative spring physics solver...');
-
-          // Parse intent kinetic weight
-          const lIntent = (intentOpt || 'balanced').toLowerCase();
-          let kinetic_weight = KineticWeight.BALANCED;
-          if (lIntent.includes('heavy')) kinetic_weight = KineticWeight.HEAVY;
-          else if (lIntent.includes('grounded')) kinetic_weight = KineticWeight.GROUNDED;
-          else if (lIntent.includes('light')) kinetic_weight = KineticWeight.LIGHT;
-          else if (lIntent.includes('floating')) kinetic_weight = KineticWeight.FLOATING;
-
-          const trigger = (selector.includes('btn') || selector.includes('button') || selector.includes('card') || selector.includes('hover'))
-            ? TriggerType.HOVER
-            : TriggerType.SCROLL;
-
-          const spatial_plane = (lIntent.includes('3d') || lIntent.includes('depth') || lIntent.includes('2.5d'))
-            ? SpatialPlane.DEPTH
-            : SpatialPlane.FLAT;
-
-          const intent = { kinetic_weight, trigger, spatial_plane };
-          spec.trigger_type = trigger;
-
-          if (trigger === TriggerType.HOVER) {
-            spec.physics_blocks = solveHoverLift(intent, theme, selector);
-          } else {
-            spec.physics_blocks = solveScrollReveal(intent, theme, selector);
-          }
-
-          if (spatial_plane === SpatialPlane.DEPTH) {
-            spec.spatial_env = {
-              perspective_px: 800,
-              perspective_origin: 'center',
-              transform_style: 'preserve-3d',
-              overflow: 'visible'
-            };
-          }
-        }
-
-        // 4. Compile and Write motion.md to workspace root
-        try {
-          const mdContent = writeMotionSpecToWorkspace('.', spec, theme);
-          const responseText = `SUCCESS: motion.md compiled and saved to workspace root!\n\n\`\`\`markdown\n${mdContent}\n\`\`\`\n\nSYSTEM INSTRUCTION INJECTION:\n1. READ motion.md before drafting animation code.\n2. BAN the use of transition: all 0.3s ease.\n3. FORCE will-change: transform during transition and remove after.\n4. FORCE the exact spring parameters (stiffness, damping, mass) compiled in Section 2.`;
-
-          return {
-            jsonrpc: '2.0',
-            id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: responseText
-                }
-              ]
-            }
-          };
-        } catch (err) {
-          return {
-            jsonrpc: '2.0',
-            id,
-            error: { code: -32603, message: `Compiler failed to save specification: ${err.message}` }
-          };
-        }
-      } else {
+      const tool = toolsRegistry[toolName];
+      if (!tool) {
         return {
           jsonrpc: '2.0',
           id,
           error: { code: -32601, message: `Unknown tool: ${toolName}` }
+        };
+      }
+
+      try {
+        const result = await tool.run(argumentsVal);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result
+        };
+      } catch (err) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32603, message: `Tool execution failed: ${err.message}` }
         };
       }
     }
@@ -215,29 +165,7 @@ export async function handleMcpRequest(reqVal) {
         jsonrpc: '2.0',
         id,
         result: {
-          prompts: [
-            {
-              name: 'motion_intent',
-              description: 'Three-question interactive workflow to establish the kinetic weight, trigger geometry, and spatial plane of an animation.',
-              arguments: [
-                {
-                  name: 'kinetic_weight',
-                  description: 'stiffness/damping profile: heavy, grounded, balanced, light, floating',
-                  required: true
-                },
-                {
-                  name: 'trigger_geometry',
-                  description: 'trigger system: scroll, hover, time, scroll-scrub, click',
-                  required: true
-                },
-                {
-                  name: 'spatial_plane',
-                  description: '3D dimensions: 2d, 2.5d',
-                  required: true
-                }
-              ]
-            }
-          ]
+          prompts: Object.values(promptsRegistry)
         }
       };
 
@@ -246,42 +174,53 @@ export async function handleMcpRequest(reqVal) {
       const promptName = params.name;
       const argumentsVal = params.arguments || {};
 
-      if (promptName === 'motion_intent') {
-        const weight = argumentsVal.kinetic_weight || 'balanced';
-        const geom = argumentsVal.trigger_geometry || 'scroll';
-        const plane = argumentsVal.spatial_plane || '2d';
-
-        const instruction = `Please generate a motion specification with these parameters:\n- Kinetic Weight: ${weight}\n- Trigger Geometry: ${geom}\n- Spatial Plane: ${plane}\n\nYou can pass this intent as arguments to the \`generate_motion_spec\` tool!`;
-
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            description: 'Customized motion intent prompt',
-            messages: [
-              {
-                role: 'user',
-                content: {
-                  type: 'text',
-                  text: instruction
-                }
-              }
-            ]
-          }
-        };
-      } else {
+      const promptObj = promptsRegistry[promptName];
+      if (!promptObj) {
         return {
           jsonrpc: '2.0',
           id,
           error: { code: -32601, message: `Unknown prompt: ${promptName}` }
         };
       }
+
+      let instruction = '';
+      if (promptName === 'motion_intent') {
+        const weight = argumentsVal.kinetic_weight || 'balanced';
+        const geom = argumentsVal.trigger_geometry || 'scroll';
+        const plane = argumentsVal.spatial_plane || '2d';
+        instruction = `Please generate a motion specification with these parameters:\n- Kinetic Weight: ${weight}\n- Trigger Geometry: ${geom}\n- Spatial Plane: ${plane}\n\nYou can pass this intent as arguments to the \`generate_motion_spec\` tool!`;
+      } else if (promptName === 'design_audit') {
+        const pType = argumentsVal.project_type || 'Landing';
+        const brand = argumentsVal.brand_personality || 'Professional';
+        const frame = argumentsVal.framework || 'React';
+        const anims = argumentsVal.animations || 'All';
+        instruction = `Establish motion DNA for a ${brand} ${pType} project in ${frame}. Focus on ${anims}.\nUse \`validate_motion_performance\` to audit code.`;
+      } else if (promptName === 'component_motion') {
+        const comp = argumentsVal.component || 'Button';
+        const trig = argumentsVal.trigger || 'Hover';
+        const feel = argumentsVal.feel || 'Smooth';
+        instruction = `Generate custom spring spec for component "${comp}" triggered by "${trig}" with a "${feel}" animation curve.\nUse \`generate_interaction_spec\` for composition.`;
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          description: promptObj.description,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: instruction
+              }
+            }
+          ]
+        }
+      };
     }
 
     default:
-      // MCP notifications (e.g. notifications/initialized, notifications/cancelled)
-      // are one-way messages with no `id` field. Per the JSON-RPC 2.0 and MCP specs,
-      // the server MUST NOT send any response for notifications.
       if (method.startsWith('notifications/')) {
         console.error(`[motion-engine] Received notification: ${method} (acknowledged, no response sent)`);
         return null;

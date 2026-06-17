@@ -1,0 +1,8 @@
+
+.card-bad {
+  transition: all 0.3s ease;
+  width: 100px;
+}
+.card-bad:hover {
+  width: 200px;
+}
